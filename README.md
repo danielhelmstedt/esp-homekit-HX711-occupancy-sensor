@@ -1,6 +1,8 @@
 # esp-homekit-HX711-occupancy-sensor
 Native ESP8266 Homekit Occupancy Sensor using HX711 and load cells.
 
+Related: Analog/ADC based sensor - https://github.com/danielhelmstedt/esp-homekit-analog-occupancy-sensor
+
 This is an ESP8266 native Homekit firmware for reading weight from a HX711 and load cells. This firmware exposes an Occupancy sensor, as well as custom characteristics; Sensor value, Calibration factor, Threshold, and Tare. These custom characteristics are only viewable using Eve, Home+ or another third-party homekit app.
 
 Based off the wonderful https://github.com/Mixiaoxiao/Arduino-HomeKit-ESP8266 library.
