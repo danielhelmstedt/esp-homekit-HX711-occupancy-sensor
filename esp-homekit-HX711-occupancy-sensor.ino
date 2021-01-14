@@ -24,13 +24,13 @@ void setup() {
   Serial.begin(115200);
   Serial.println( );
 
+  Serial.println("HX711 Homekit Sensor. DOUT_PIN = D4, SCK_PIN = D3");
+
   //Create dynamic hostname
   char out[20];
   sprintf(out, "PressureSensor-%X",ESP.getChipId());
   const char * serial_str = out;
   Serial.println(serial_str);
-  
-  Serial.println("HX711 Homekit Sensor. DOUT_PIN = D4, SCK_PIN = D3");
 
   //Read EEPROM
   EEPROM.begin(512);  //Initialize EEPROM
@@ -130,13 +130,13 @@ void homekit_report() {
     homekit_characteristic_notify(&cha_threshold, cha_threshold.value);
     Serial.println("Updated Homekit threshold with saved value");
   }
-  if(cha_calibration.value.int_value == 0 && data.eepromCalibration != 0) { //If homekit threshold is 0 and EEPROM has data saved
-    cha_calibration.value.int_value = data.eepromCalibration;
-    homekit_characteristic_notify(&cha_calibration, cha_calibration.value);
-    Serial.println("Updated Homekit threshold with saved value");
-  }
+  // if(cha_calibration.value.int_value == 0 && data.eepromCalibration != 0) { //If homekit threshold is 0 and EEPROM has data saved
+  //   cha_calibration.value.int_value = data.eepromCalibration;
+  //   homekit_characteristic_notify(&cha_calibration, cha_calibration.value);
+  //   Serial.println("Updated Homekit threshold with saved value");
+  // }
   
-  scale.set_scale(calibration_factor); //Adjust to this calibration factor
+  scale.set_scale(cha_calibration.value.int_value); //Adjust to this calibration factor
 
   Serial.print("Reading: ");
   int reading = (scale.get_units(3));
@@ -144,7 +144,7 @@ void homekit_report() {
   Serial.print(reading);
   Serial.print(" kgs"); //Change this to kg and re-adjust the calibration factor if you follow SI units like a sane person
   Serial.print(" Calibration factor: ");
-  Serial.print(calibration_factor);
+  Serial.print(cha_calibration.value.int_value);
   Serial.println();
 
   uint8_t occupancy = reading >= cha_threshold.value.int_value ? 1 : 0; // Logic - Implements threshold

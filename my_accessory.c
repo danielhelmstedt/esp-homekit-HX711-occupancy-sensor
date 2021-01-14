@@ -7,6 +7,7 @@
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
+#include <Arduino.h>
 
 void my_accessory_identify(homekit_value_t _value) {
   printf("accessory identify\n");
@@ -68,7 +69,6 @@ homekit_characteristic_t cha_calibration = HOMEKIT_CHARACTERISTIC_(CUSTOM,
     .min_value = (float[]) {0},
     .max_value = (float[]) {5000},
     .min_step =  (float[]) {10},
-    .value = HOMEKIT_INT_(2000),
 );
 
 homekit_accessory_t *accessories[] = {
