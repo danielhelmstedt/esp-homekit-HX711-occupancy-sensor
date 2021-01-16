@@ -6,34 +6,52 @@
 #include <WiFiManager.h>
 #include <ESP8266WiFi.h>
 #include <HX711.h>
+#include <ESP_EEPROM.h>
 
-HX711 scale;
 #define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
 
-const int LOADCELL_DOUT_PIN = D4; // Remember these are ESP GPIO pins, they are not the physical pins on the board.
+HX711 scale;
+const int LOADCELL_DOUT_PIN = D4;
 const int LOADCELL_SCK_PIN = D3;
+
+// access homekit characteristics defined in my_accessory.c
+extern "C" homekit_server_config_t config;
+extern "C" homekit_characteristic_t cha_occupancy;
+extern "C" homekit_characteristic_t cha_threshold;
+extern "C" homekit_characteristic_t cha_calibration;
+extern "C" homekit_characteristic_t cha_sensorValue;
+extern "C" homekit_characteristic_t cha_tare;
+
+//Data to save to EEPROM
+struct { 
+  int eepromThreshold;
+  int eepromCalibration;
+} data;
+uint addr = 0;
 
 void setup() {
   Serial.begin(115200);
-<<<<<<< HEAD
   Serial.println( );
 
   Serial.println("HX711 Homekit Sensor. DOUT_PIN = D4, SCK_PIN = D3");
 
   //Create dynamic hostname
-=======
-  
->>>>>>> parent of f36b7c7... Implemented EEPROM
   char out[20];
   sprintf(out, "PressureSensor-%X",ESP.getChipId());
   const char * serial_str = out;
   Serial.println(serial_str);
-
-  Serial.println("HX711 Homekit Sensor. DOUT_PIN = D4, SCK_PIN = D3");
   
+  //Read EEPROM
+  EEPROM.begin(512);  //Initialize EEPROM
+  EEPROM.get(addr, data);
+  Serial.print("Reading saved EEPROM Threshold - ");
+  Serial.println(data.eepromThreshold);
+  Serial.print("Reading saved EEPROM Calibration Factor - ");
+  Serial.println(data.eepromCalibration);
+
   pinMode(LED_BUILTIN, OUTPUT); 
   digitalWrite(LED_BUILTIN, HIGH); // turn the LED off.
-  
+
   WiFiManager wifiManager;
   wifiManager.autoConnect(serial_str);
 
@@ -81,14 +99,6 @@ void loop() {
 // Homekit setup and loop
 //==============================
 
-// access your homekit characteristics defined in my_accessory.c
-extern "C" homekit_server_config_t config;
-extern "C" homekit_characteristic_t cha_occupancy;
-extern "C" homekit_characteristic_t cha_threshold;
-extern "C" homekit_characteristic_t cha_calibration;
-extern "C" homekit_characteristic_t cha_sensorValue;
-extern "C" homekit_characteristic_t cha_tare;
-
 static uint32_t next_heap_millis = 0;
 static uint32_t next_report_millis = 0;
 
@@ -116,32 +126,27 @@ void my_homekit_loop() {
 }
 
 void homekit_report() {
-<<<<<<< HEAD
-  //Read EEPROM
-  if(cha_threshold.value.int_value == 0 && data.eepromThreshold != 0) { //If homekit threshold is 0 and EEPROM has data saved
-    cha_threshold.value.int_value = data.eepromThreshold;
-    homekit_characteristic_notify(&cha_threshold, cha_threshold.value);
-    Serial.println("Updated Homekit threshold with saved value");
-  }
-  // if(cha_calibration.value.int_value == 0 && data.eepromCalibration != 0) { //If homekit threshold is 0 and EEPROM has data saved
-  //   cha_calibration.value.int_value = data.eepromCalibration;
-  //   homekit_characteristic_notify(&cha_calibration, cha_calibration.value);
-  //   Serial.println("Updated Homekit threshold with saved value");
-  // }
-=======
-  int calibration_factor = cha_calibration.value.int_value;
->>>>>>> parent of f36b7c7... Implemented EEPROM
-  
-  scale.set_scale(cha_calibration.value.int_value); //Adjust to this calibration factor
-
+  scale.set_scale(cha_calibration.value.int_value);
   Serial.print("Reading: ");
   int reading = (scale.get_units(3));
   if (reading < 0) { reading = reading * -1;}
   Serial.print(reading);
-  Serial.print(" kgs"); //Change this to kg and re-adjust the calibration factor if you follow SI units like a sane person
+  Serial.println(" kgs"); 
   Serial.print(" Calibration factor: ");
-  Serial.print(cha_calibration.value.int_value);
-  Serial.println();
+  Serial.println(cha_calibration.value.int_value);
+
+  //Initialize HomeKit Calibration value from EEPROM on boot
+  if(cha_calibration.value.int_value == 0 && data.eepromCalibration != 0) { 
+    cha_calibration.value.int_value = data.eepromCalibration;
+    homekit_characteristic_notify(&cha_calibration, cha_calibration.value);
+    Serial.println("Updated HomeKit with saved Calibration value");
+  }
+  //Initialize HomeKit Threshold value from EEPROM on boot
+  if(cha_threshold.value.int_value == 0 && data.eepromThreshold != 0) { 
+    cha_threshold.value.int_value = data.eepromThreshold;
+    homekit_characteristic_notify(&cha_threshold, cha_threshold.value);
+    Serial.println("Updated HomeKit with saved Threshold value");
+  }
 
   uint8_t occupancy = reading >= cha_threshold.value.int_value ? 1 : 0; // Logic - Implements threshold
   
@@ -151,6 +156,23 @@ void homekit_report() {
   homekit_characteristic_notify(&cha_sensorValue, cha_sensorValue.value);
   
   LOG_D("occupancy %u", occupancy);
+
+  //Update EEPROM Calibration
+  if(cha_calibration.value.int_value != data.eepromCalibration){
+    data.eepromCalibration = cha_calibration.value.int_value; //sync values
+    EEPROM.put(addr, data.eepromCalibration);               //prepare changes, if any
+    EEPROM.commit();                                      //Perform write to flash
+    Serial.print("Calibration changed - updated EEPROM to ");
+    Serial.println(data.eepromCalibration); 
+  }
+  //Update EEPROM Threshold
+  if(cha_threshold.value.int_value != data.eepromThreshold){
+    data.eepromThreshold = cha_threshold.value.int_value; //sync values
+    EEPROM.put(addr, data.eepromThreshold);               //prepare changes, if any
+    EEPROM.commit();                                      //Perform write to flash
+    Serial.print("Threshold changed - updated EEPROM to ");
+    Serial.println(data.eepromThreshold); 
+  }
 }
 
 void tare_callback(const homekit_value_t v) {
