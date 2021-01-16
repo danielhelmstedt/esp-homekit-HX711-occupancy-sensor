@@ -1,14 +1,19 @@
 #include <ArduinoOTA.h>
 #include <Arduino.h>
 #include <arduino_homekit_server.h>
-#include <DNSServer.h>
-#include <ESP8266WebServer.h>
-#include <WiFiManager.h>
+#include <homekit/homekit.h>
+#include <homekit/characteristics.h>
 #include <ESP8266WiFi.h>
+#include <WiFiManager.h>
+#include <ESP8266WebServer.h>
+#include <DNSServer.h>
 #include <HX711.h>
 #include <ESP_EEPROM.h>
 
 #define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
+
+static uint32_t next_heap_millis = 0;
+static uint32_t next_report_millis = 0;
 
 HX711 scale;
 const int LOADCELL_DOUT_PIN = D4;
@@ -37,7 +42,7 @@ void setup() {
 
   //Create dynamic hostname
   char out[20];
-  sprintf(out, "PressureSensor-%X",ESP.getChipId());
+  sprintf(out, "HX711Sensor-%X",ESP.getChipId());
   const char * serial_str = out;
   Serial.println(serial_str);
   
@@ -54,6 +59,7 @@ void setup() {
 
   WiFiManager wifiManager;
   wifiManager.autoConnect(serial_str);
+  WiFi.hostname(serial_str);
 
   ArduinoOTA.setHostname(serial_str);
   ArduinoOTA.setPassword("12041997");
@@ -99,12 +105,8 @@ void loop() {
 // Homekit setup and loop
 //==============================
 
-static uint32_t next_heap_millis = 0;
-static uint32_t next_report_millis = 0;
-
 void my_homekit_setup() {
   cha_tare.setter = tare_callback;
-    
   arduino_homekit_setup(&config);
 }
 
@@ -112,31 +114,27 @@ void my_homekit_loop() {
   arduino_homekit_loop();
   const uint32_t t = millis();
   if (t > next_report_millis) {
-    // report sensor values every 5 seconds
+    // report sensor values every 1 seconds
     next_report_millis = t + 1 * 1000;
     homekit_report();
   }
   if (t > next_heap_millis) {
-    // show heap info every 5 seconds
-    next_heap_millis = t + 5 * 1000;
+    // show heap info every 15 seconds
+    next_heap_millis = t + 15 * 1000;
     LOG_D("Free heap: %d, HomeKit clients: %d",
           ESP.getFreeHeap(), arduino_homekit_connected_clients_count());
 
   }
 }
 
-void homekit_report() {
-  scale.set_scale(cha_calibration.value.int_value);
-  Serial.print("Reading: ");
-  int reading = (scale.get_units(3));
-  if (reading < 0) { reading = reading * -1;}
-  Serial.print(reading);
-  Serial.println(" kgs"); 
-  Serial.print(" Calibration factor: ");
-  Serial.println(cha_calibration.value.int_value);
+/////////////////////////////////////////////////////////////////////
+////////Function for reading sensor and reporting to HomeKit.////////
+/////////////////////////////////////////////////////////////////////
+
+void homekit_report() { 
 
   //Initialize HomeKit Calibration value from EEPROM on boot
-  if(cha_calibration.value.int_value == 0 && data.eepromCalibration != 0) { 
+  if(cha_calibration.value.int_value == 200 && data.eepromCalibration != 0) { 
     cha_calibration.value.int_value = data.eepromCalibration;
     homekit_characteristic_notify(&cha_calibration, cha_calibration.value);
     Serial.println("Updated HomeKit with saved Calibration value");
@@ -147,38 +145,48 @@ void homekit_report() {
     homekit_characteristic_notify(&cha_threshold, cha_threshold.value);
     Serial.println("Updated HomeKit with saved Threshold value");
   }
-
-  uint8_t occupancy = reading >= cha_threshold.value.int_value ? 1 : 0; // Logic - Implements threshold
   
-  cha_occupancy.value.uint8_value = occupancy;
+  //Initialize scale
+  scale.set_scale(cha_calibration.value.int_value) ;
+
+  //Read the HX711 load cells
+  int reading;
+  reading = (scale.get_units(3));     //Read from the sensor
+  if (reading < 0) {reading = reading * -1;} //force min
+  if (reading > 200) {reading = 200;} //force max
+
+  //Update HomeKit
   cha_sensorValue.value.int_value = reading;
+  cha_occupancy.value.bool_value = reading <= cha_threshold.value.int_value ? 0 : 1; //Determine occupancy status
   homekit_characteristic_notify(&cha_occupancy, cha_occupancy.value);
   homekit_characteristic_notify(&cha_sensorValue, cha_sensorValue.value);
-  
-  LOG_D("occupancy %u", occupancy);
+  Serial.print("Calibration factor: ");
+  Serial.println(cha_calibration.value.int_value);
+  Serial.print("threshold = ");
+  Serial.println(cha_threshold.value.int_value);
+  Serial.print("sensor reading = ");
+  Serial.println(reading);
+  Serial.print("occupancy = ");
+  Serial.println(cha_occupancy.value.bool_value); 
 
-  //Update EEPROM Calibration
+  //Update EEPROM
   if(cha_calibration.value.int_value != data.eepromCalibration){
-    data.eepromCalibration = cha_calibration.value.int_value; //sync values
-    EEPROM.put(addr, data.eepromCalibration);               //prepare changes, if any
-    EEPROM.commit();                                      //Perform write to flash
-    Serial.print("Calibration changed - updated EEPROM to ");
-    Serial.println(data.eepromCalibration); 
+    data.eepromCalibration = cha_calibration.value.int_value; //sync values 
+    EEPROM.put(addr, data.eepromCalibration);  //prepare changes, if any
+    EEPROM.commit();                           //Perform write to flash
+    Serial.println("Got Calibration factor change - updated EEPROM");
   }
-  //Update EEPROM Threshold
   if(cha_threshold.value.int_value != data.eepromThreshold){
     data.eepromThreshold = cha_threshold.value.int_value; //sync values
-    EEPROM.put(addr, data.eepromThreshold);               //prepare changes, if any
-    EEPROM.commit();                                      //Perform write to flash
-    Serial.print("Threshold changed - updated EEPROM to ");
-    Serial.println(data.eepromThreshold); 
+    EEPROM.put(addr, data);  //prepare changes, if any
+    EEPROM.commit();         //Perform write to flash
+    Serial.println("Got Threshold change - updating EEPROM");
   }
 }
 
 void tare_callback(const homekit_value_t v) {
     Serial.println("Tare Scale");
     scale.tare();
-    delay(50);
     cha_tare.value.bool_value = 0; //turn the switch off again
     homekit_characteristic_notify(&cha_tare, cha_tare.value);
 }

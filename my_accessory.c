@@ -66,9 +66,10 @@ homekit_characteristic_t cha_calibration = HOMEKIT_CHARACTERISTIC_(CUSTOM,
     .permissions = homekit_permissions_paired_read
                  | homekit_permissions_paired_write
                  | homekit_permissions_notify,
-    .min_value = (float[]) {0},
+    .min_value = (float[]) {200},
     .max_value = (float[]) {5000},
     .min_step =  (float[]) {10},
+    .value = HOMEKIT_INT_(200),
 );
 
 homekit_accessory_t *accessories[] = {
@@ -97,5 +98,6 @@ homekit_accessory_t *accessories[] = {
 
 homekit_server_config_t config = {
     .accessories = accessories,
-    .password = "120-41-997"
+    .password = "120-41-997",
+      .setupId = "1QJ8",
 };
