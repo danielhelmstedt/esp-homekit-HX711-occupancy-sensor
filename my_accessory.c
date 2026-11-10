@@ -9,6 +9,8 @@
 #include <homekit/characteristics.h>
 #include <Arduino.h>
 
+char serial[16] = "XXXXXXXXXXXXXXXX\0";
+
 void my_accessory_identify(homekit_value_t _value) {
   printf("accessory identify\n");
   for (int i = 0; i <= 5; i++) { //start at 0, run loop and add 1, repeat until 5
@@ -75,10 +77,10 @@ homekit_characteristic_t cha_calibration = HOMEKIT_CHARACTERISTIC_(CUSTOM,
 homekit_accessory_t *accessories[] = {
   HOMEKIT_ACCESSORY(.id=1, .category=homekit_accessory_category_sensor, .services=(homekit_service_t*[]) {
       HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]) {
-      HOMEKIT_CHARACTERISTIC(NAME, "HX711 Occupancy Sensor"),
+      HOMEKIT_CHARACTERISTIC(NAME, serial),
       HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Dan Helmstedt"),
-      HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "00001"),
-      HOMEKIT_CHARACTERISTIC(MODEL, "ESP8266 HX711"),
+      HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, serial),
+      HOMEKIT_CHARACTERISTIC(MODEL, "ESP HX711 Sensor"),
       HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "1.0"),
       HOMEKIT_CHARACTERISTIC(IDENTIFY, my_accessory_identify),
       NULL

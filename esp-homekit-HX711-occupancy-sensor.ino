@@ -26,6 +26,8 @@ extern "C" homekit_characteristic_t cha_threshold;
 extern "C" homekit_characteristic_t cha_calibration;
 extern "C" homekit_characteristic_t cha_sensorValue;
 extern "C" homekit_characteristic_t cha_tare;
+extern "C" char serial[16];
+
 
 //Data to save to EEPROM
 struct { 
@@ -41,10 +43,7 @@ void setup() {
   Serial.println("HX711 Homekit Sensor. DOUT_PIN = D4, SCK_PIN = D3");
 
   //Create dynamic hostname
-  char out[20];
-  sprintf(out, "HX711Sensor-%X",ESP.getChipId());
-  const char * serial_str = out;
-  Serial.println(serial_str);
+  printf(serial, "ESP-HX711-%X\0", ESP.getChipId());
   
   //Read EEPROM
   EEPROM.begin(512);  //Initialize EEPROM
@@ -58,10 +57,10 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH); // turn the LED off.
 
   WiFiManager wifiManager;
-  wifiManager.autoConnect(serial_str);
-  WiFi.hostname(serial_str);
+  wifiManager.autoConnect(serial);
+  WiFi.hostname(serial);
 
-  ArduinoOTA.setHostname(serial_str);
+  ArduinoOTA.setHostname(serial);
   ArduinoOTA.setPassword("12041997");
   ArduinoOTA.onStart([]() {
     Serial.println("Start");
